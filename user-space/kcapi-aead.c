@@ -9,7 +9,7 @@
 // Note: all sizes in number of bytes.
 #define AUTH_TAG_SZ 16
 #define KEY_BYTE_SZ 16
-#define DATA_SZ 64
+#define DATA_SZ 16
 
 #define DEBUG 1
 
@@ -81,7 +81,11 @@ int main(void)
   kcapi_aead_setassoclen(handle, 0);
 
 #ifdef DEBUG
-  print_buffer("Data + Tag", data, DATA_SZ + AUTH_TAG_SZ);
+  print_buffer("Data", data, DATA_SZ);
+  print_buffer("Auth", data + DATA_SZ, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,  kcapi_cipher_ivsize(handle));
+  print_buffer("Key",  key, KEY_BYTE_SZ);
+
 #endif
 
   // Runs encryption.
@@ -95,7 +99,11 @@ int main(void)
   debug_print("<rbruno-aead>", "Encryption...Done");
 
 #ifdef DEBUG
-  print_buffer("Data + Tag", data, DATA_SZ + AUTH_TAG_SZ);
+  print_buffer("Data", data, DATA_SZ);
+  print_buffer("Auth", data + DATA_SZ, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,  kcapi_cipher_ivsize(handle));
+  print_buffer("Key",  key, KEY_BYTE_SZ);
+
 #endif
 
   // Runs decryption.
@@ -109,11 +117,16 @@ int main(void)
   debug_print("<rbruno-aead>", "Decryption...Done!");
 
 #ifdef DEBUG
-  print_buffer("Data + Tag", data, DATA_SZ + AUTH_TAG_SZ);
+  print_buffer("Data", data, DATA_SZ);
+  print_buffer("Auth", data + DATA_SZ, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,  kcapi_cipher_ivsize(handle));
+  print_buffer("Key",  key, KEY_BYTE_SZ);
 #endif
 
   // Free crypto.
   kcapi_aead_destroy(handle);
-
+  free(data),
+  free(iv);
+  free(key);
   return 0;
 }

@@ -8,7 +8,7 @@
 #define AUTH_TAG_SZ 16
 #define ASSOC_DATA_SZ 0
 #define KEY_BYTE_SZ 16
-#define DATA_SZ 64
+#define DATA_SZ 16
 
 u8 *key   = NULL;
 u8 *iv    = NULL;
@@ -21,26 +21,22 @@ int aes_gcm_encrypt(struct crypto_aead *tfm,
                     size_t data_len, 
                     u8 *atag)
 {
-    struct scatterlist sg[3];
-    struct aead_request *aead_req;
-    int reqsize = sizeof(*aead_req) + crypto_aead_reqsize(tfm);
-
-    aead_req = kzalloc(reqsize, GFP_ATOMIC);
+    int ret;
+    struct scatterlist sg[2];
+    struct aead_request *aead_req = aead_request_alloc(tfm, GFP_ATOMIC);
     if (!aead_req)
         return -ENOMEM;
 
-    sg_init_table(sg, 3);
-    sg_set_buf(&sg[0], NULL,  0); // Note: not using associated data.
-    sg_set_buf(&sg[1], data,  data_len);
-    sg_set_buf(&sg[2], atag,   AUTH_TAG_SZ);
+    sg_init_table(sg, 2);
+    sg_set_buf(&sg[0], data,  data_len);
+    sg_set_buf(&sg[1], atag,   AUTH_TAG_SZ);
 
-    aead_request_set_tfm(   aead_req, tfm);
+    aead_request_set_ad(    aead_req, 0);
     aead_request_set_crypt( aead_req, sg, sg, data_len, iv);
-    aead_request_set_ad(    aead_req, sg[0].length);
 
-    crypto_aead_encrypt(aead_req);
-    kzfree(aead_req);
-    return 0;
+    ret = crypto_aead_encrypt(aead_req);
+    aead_request_free(aead_req);
+    return ret;
 }
 
 int aes_gcm_decrypt(struct crypto_aead *tfm, 
@@ -49,32 +45,22 @@ int aes_gcm_decrypt(struct crypto_aead *tfm,
                     size_t data_len, 
                     u8 *atag)
 {
-    struct scatterlist sg[3];
-    struct aead_request *aead_req;
-    int reqsize = sizeof(*aead_req) + crypto_aead_reqsize(tfm);
-    int err;
-
-    if (data_len == 0)
-        return -EINVAL;
-
-    aead_req = kzalloc(reqsize, GFP_ATOMIC);
+    int ret;
+    struct scatterlist sg[2];
+    struct aead_request *aead_req = aead_request_alloc(tfm, GFP_ATOMIC);
     if (!aead_req)
         return -ENOMEM;
 
-    sg_init_table(sg, 3);
-    sg_set_buf(&sg[0], NULL,  0); // Note: not using associated data.
-    sg_set_buf(&sg[1], data,  data_len);
-    sg_set_buf(&sg[2], atag,   AUTH_TAG_SZ);
-    
-    aead_request_set_tfm(aead_req, tfm);
+    sg_init_table(sg, 2);
+    sg_set_buf(&sg[0], data,  data_len);
+    sg_set_buf(&sg[1], atag,   AUTH_TAG_SZ);
+
+    aead_request_set_ad(    aead_req, 0);
     aead_request_set_crypt(aead_req, sg, sg, data_len + AUTH_TAG_SZ, iv);
-    aead_request_set_ad(aead_req, sg[0].length);
 
-    err = crypto_aead_decrypt(aead_req);
-    kzfree(aead_req);
-
-    // TODO - check for -EBADMSG
-    return err;
+    ret = crypto_aead_decrypt(aead_req);
+    aead_request_free(aead_req);
+    return ret;
 }
 
 struct crypto_aead *aes_gcm_key_setup_encrypt(u8 **key,
@@ -89,9 +75,7 @@ struct crypto_aead *aes_gcm_key_setup_encrypt(u8 **key,
       if (!key)
         return ERR_PTR(-ENOMEM);
 
-      // TODO - understand out options wrt to 2nd and 3rd arguments.
-      // Setup handle.
-      tfm = crypto_alloc_aead("gcm(aes)", 0, CRYPTO_ALG_ASYNC);
+      tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
       if (IS_ERR(tfm)) {
           return tfm;
       }
@@ -155,14 +139,9 @@ int init_module(void)
     return -1; // TODO - have a better value!
   }
 
-  // Setup authentication tag.
-  atag = kzalloc(AUTH_TAG_SZ, GFP_ATOMIC);
-  if (!atag) {
-    return ENOMEM;
-  }
-
-  // Setup data.
-  data = kzalloc(DATA_SZ, GFP_ATOMIC);
+  // Setup data and authentication tag.
+  data = kzalloc(DATA_SZ + AUTH_TAG_SZ, GFP_ATOMIC);
+  atag = data + DATA_SZ;
   if (!data) {
     return ENOMEM;
   }
@@ -170,6 +149,8 @@ int init_module(void)
 #ifdef DEBUG
   print_buffer("Data", data, DATA_SZ);
   print_buffer("Auth", atag, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,   crypto_aead_ivsize(tfm));
+  print_buffer("Key",  key,  KEY_BYTE_SZ);
 #endif
 
   // Runs encryption.
@@ -183,6 +164,9 @@ int init_module(void)
 #ifdef DEBUG 
   print_buffer("Data", data, DATA_SZ);
   print_buffer("Auth", atag, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,   crypto_aead_ivsize(tfm));
+  print_buffer("Key",  key,  KEY_BYTE_SZ);
+
 #endif
  
   // Runs decryption.
@@ -196,6 +180,8 @@ int init_module(void)
 #ifdef DEBUG 
   print_buffer("Data", data, DATA_SZ);
   print_buffer("Auth", atag, AUTH_TAG_SZ);
+  print_buffer("IV",   iv,   crypto_aead_ivsize(tfm));
+  print_buffer("Key",  key,  KEY_BYTE_SZ);
 #endif
 
   // Free crypto. 
