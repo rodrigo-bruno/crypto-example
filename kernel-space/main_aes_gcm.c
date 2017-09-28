@@ -1,6 +1,7 @@
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <crypto/aead.h>
+#include <linux/time.h>
 
 #define DEBUG 1
 
@@ -129,6 +130,7 @@ int init_module(void)
 {
   int ret;
   struct crypto_aead *tfm;
+  struct timeval t0,t1;
 
   debug_print("<rbruno-aead>", "init_module() called");
 
@@ -155,11 +157,14 @@ int init_module(void)
 
   // Runs encryption.
   debug_print("<rbruno-aead>", "Encryption...");
+  do_gettimeofday(&t0);
   ret = aes_gcm_encrypt(tfm, iv, data, DATA_SZ, atag);
   if (ret) {
     debug_print("<rbruno-aead>", "failed encrypt");
   }
-  debug_print("<rbruno-aead>", "Encryption...Done!");
+  do_gettimeofday(&t1);
+  printk("<rbruno-aead> Encryption...Done (%llu microseconds)!", 
+      (uint64_t) (t1.tv_sec - t0.tv_sec)*1000000 + (t1.tv_usec - t0.tv_usec));
  
 #ifdef DEBUG 
   print_buffer("Data", data, DATA_SZ);
@@ -171,11 +176,15 @@ int init_module(void)
  
   // Runs decryption.
   debug_print("<rbruno-aead>", "Decryption...");
+  do_gettimeofday(&t0);
+  ret = aes_gcm_encrypt(tfm, iv, data, DATA_SZ, atag);
   ret = aes_gcm_decrypt(tfm, iv, data, DATA_SZ, atag);
   if (ret) {
     debug_print("<rbruno-aead>", "failed decrypt");
   }
-  debug_print("<rbruno-aead>", "Decryption...Done!");
+  do_gettimeofday(&t1);
+  printk("<rbruno-aead> Decryption...Done (%llu microseconds)!", 
+      (uint64_t) (t1.tv_sec - t0.tv_sec)*1000000 + (t1.tv_usec - t0.tv_usec));
 
 #ifdef DEBUG 
   print_buffer("Data", data, DATA_SZ);

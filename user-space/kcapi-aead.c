@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include <kcapi.h>
 
@@ -36,6 +37,7 @@ int main(void)
 {
   int ret;
   struct kcapi_handle *handle = NULL;
+  struct timeval t0,t1;
 
   // Setup crypto (part 1).
   ret = kcapi_aead_init(&handle, "gcm(aes)", 0);
@@ -90,13 +92,16 @@ int main(void)
 
   // Runs encryption.
   debug_print("<rbruno-aead>", "Encryption...");
+  gettimeofday(&t0, NULL); 
   ret = kcapi_aead_encrypt(
         handle, data, DATA_SZ, iv, data, DATA_SZ + AUTH_TAG_SZ, KCAPI_ACCESS_HEURISTIC);
   if (ret < 0) {
     perror("Failed to encrypt data");
     return -1;
   }
-  debug_print("<rbruno-aead>", "Encryption...Done");
+  gettimeofday(&t1, NULL); 
+  printf("<rbruno-aead> Encryption...Done (%lu microseconds)!\n",
+      (uint64_t) (t1.tv_sec - t0.tv_sec)*1000000 + (t1.tv_usec - t0.tv_usec));
 
 #ifdef DEBUG
   print_buffer("Data", data, DATA_SZ);
@@ -108,13 +113,17 @@ int main(void)
 
   // Runs decryption.
   debug_print("<rbruno-aead>", "Decryption...");
+  gettimeofday(&t0, NULL); 
   ret = kcapi_aead_decrypt(
         handle, data, DATA_SZ + AUTH_TAG_SZ, iv, data, DATA_SZ, KCAPI_ACCESS_HEURISTIC);
   if (ret < 0) {
     perror("Failed to decrypt data");
     return -1;
   }
-  debug_print("<rbruno-aead>", "Decryption...Done!");
+  gettimeofday(&t1, NULL); 
+  printf("<rbruno-aead> Decryption...Done (%lu microseconds)!\n",
+      (uint64_t) (t1.tv_sec - t0.tv_sec)*1000000 + (t1.tv_usec - t0.tv_usec));
+
 
 #ifdef DEBUG
   print_buffer("Data", data, DATA_SZ);
